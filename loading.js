@@ -11,7 +11,7 @@ function startProgressAnimation() {
   
   const stages = [
     { progress: 15, text: "Extracting text from page...", duration: 1000 },
-    { progress: 35, text: "Sending to Gemini API...", duration: 2000 },
+    { progress: 35, text: "Sending to Groq API...", duration: 2000 },
     { progress: 55, text: "Processing translation...", duration: 3000 },
     { progress: 70, text: "Generating summary...", duration: 4000 }
   ];

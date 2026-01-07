@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Summarize & Translate",
-  "version": "1.01",
+  "version": "2.0",
   "description": "Extract text from web pages, translate to Hebrew, and summarize using Google Gemini API",
   "permissions": [
     "activeTab",

@@ -36,8 +36,8 @@ chrome.commands.onCommand.addListener((command, tab) => {
 async function handleSummarizeTranslate(tab) {
   try {
     // Check if we have a valid API key
-    if (!CONFIG.GEMINI_API_KEY || CONFIG.GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
-      await createErrorTab('Please configure your Gemini API key in config.js');
+    if (!CONFIG.GROQ_API_KEY || CONFIG.GROQ_API_KEY === 'YOUR_GROQ_API_KEY_HERE') {
+      await createErrorTab('Please configure your Groq API key in config.js');
       return;
     }
 
@@ -69,8 +69,8 @@ async function handleSummarizeTranslate(tab) {
 // Process translation in the background and send result to loading tab
 async function processTranslation(pageText, originalUrl, originalTitle, targetTabId) {
   try {
-    // Send to Gemini API
-    const translatedSummary = await callGeminiAPI(pageText);
+    // Send to Groq API
+    const translatedSummary = await callGroqAPI(pageText);
     
     // Send result to the loading tab
     await chrome.tabs.sendMessage(targetTabId, {
@@ -81,7 +81,7 @@ async function processTranslation(pageText, originalUrl, originalTitle, targetTa
     });
     
   } catch (error) {
-    console.error('Error calling Gemini API:', error);
+    console.error('Error calling Groq API:', error);
     
     // Send error to the loading tab
     try {
@@ -102,14 +102,22 @@ function extractPageText() {
   return document.body.innerText || '';
 }
 
-// Call Gemini API with retry logic
-async function callGeminiAPI(text) {
+// Call Groq API with retry logic
+async function callGroqAPI(text) {
   const requestBody = {
-    contents: [{
-      parts: [{
-        text: `${CONFIG.PROMPT_TEMPLATE}\n\n${text}`
-      }]
-    }]
+    model: CONFIG.GROQ_MODEL,
+    messages: [
+      {
+        role: 'system',
+        content: CONFIG.PROMPT_TEMPLATE
+      },
+      {
+        role: 'user',
+        content: text
+      }
+    ],
+    temperature: 0.7,
+    max_tokens: 4096
   };
 
   const maxRetries = 3;
@@ -117,36 +125,41 @@ async function callGeminiAPI(text) {
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`Gemini API attempt ${attempt}/${maxRetries}`);
+      console.log(`Groq API attempt ${attempt}/${maxRetries}`);
       
-      const response = await fetch(`${CONFIG.GEMINI_API_URL}?key=${CONFIG.GEMINI_API_KEY}`, {
+      const response = await fetch(CONFIG.GROQ_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${CONFIG.GROQ_API_KEY}`
         },
-        body: JSON.stringify(requestBody),
-        timeout: 30000 // 30 second timeout
+        body: JSON.stringify(requestBody)
       });
 
       if (response.ok) {
         const data = await response.json();
         
-        if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-          throw new Error('Invalid response from Gemini API');
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+          throw new Error('Invalid response from Groq API');
         }
 
-        return data.candidates[0].content.parts[0].text;
+        return data.choices[0].message.content;
       }
 
       // Handle specific error codes
       if (response.status === 503) {
-        lastError = new Error(`Service temporarily unavailable (attempt ${attempt}/${maxRetries}). The Gemini API is experiencing high demand.`);
+        lastError = new Error(`Service temporarily unavailable (attempt ${attempt}/${maxRetries}). The Groq API is experiencing high demand.`);
       } else if (response.status === 429) {
         lastError = new Error(`Rate limit exceeded (attempt ${attempt}/${maxRetries}). Please wait before trying again.`);
       } else if (response.status === 500) {
         lastError = new Error(`Internal server error (attempt ${attempt}/${maxRetries}). The service is temporarily down.`);
+      } else if (response.status === 401) {
+        lastError = new Error(`Authentication failed. Please check your Groq API key.`);
+      } else if (response.status === 403) {
+        lastError = new Error(`Access forbidden. Your API key may be invalid or expired.`);
       } else {
-        lastError = new Error(`API error: ${response.status} ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        lastError = new Error(`API error: ${response.status} - ${errorData.error?.message || response.statusText}`);
       }
 
       // If this isn't the last attempt, wait before retrying
@@ -171,7 +184,7 @@ async function callGeminiAPI(text) {
   }
 
   // If we've exhausted all retries, throw the last error with helpful message
-  throw new Error(`Failed after ${maxRetries} attempts. ${lastError.message}\n\nTroubleshooting tips:\n• The Gemini API may be experiencing high demand\n• Try again in a few minutes\n• Check your internet connection\n• Verify your API key is valid`);
+  throw new Error(`Failed after ${maxRetries} attempts. ${lastError.message}\n\nTroubleshooting tips:\n• The Groq API may be experiencing high demand\n• Try again in a few minutes\n• Check your internet connection\n• Verify your API key is valid at https://console.groq.com/keys`);
 }
 
 // Create loading tab
@@ -199,4 +212,4 @@ async function createErrorTab(errorMessage) {
       });
     }
   });
-} 
+}
